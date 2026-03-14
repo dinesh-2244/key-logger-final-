@@ -27,17 +27,24 @@ def launch():
     python_exe = get_python_executable()
     print(f"--- Using Python: {python_exe}")
 
+    # Resolve paths relative to this script's directory
+    server_path = os.path.join(script_dir, "backend", "server.py")
+    agent_script_path = os.path.join(script_dir, "frontend", "threat_agent.py")
+
     # 1. Start Backend Server
     print("--- Starting Backend Server...")
+    if not os.path.exists(server_path):
+        print(f"    ERROR: server.py not found at {server_path}")
+        return
     server_process = subprocess.Popen(
-        [python_exe, "backend/server.py"],
-        cwd=script_dir
+        [python_exe, server_path],
+        cwd=os.path.join(script_dir, "backend")
     )
-    
+
     # 2. Start Monitoring Agent
     print("--- Starting Monitoring Agent...")
     # Check for bundled binary first
-    bundled_agent = "dist/GuardianLensAgent"
+    bundled_agent = os.path.join(script_dir, "dist", "GuardianLensAgent")
     if sys.platform == "win32": bundled_agent += ".exe"
     elif sys.platform == "darwin": bundled_agent += ".app/Contents/MacOS/GuardianLensAgent"
 
@@ -46,10 +53,15 @@ def launch():
         agent_process = subprocess.Popen([bundled_agent], cwd=script_dir)
     else:
         print("    (Bundled binary not found. Falling back to Python script...)")
-        agent_process = subprocess.Popen(
-            [python_exe, "frontend/threat_agent.py"],
-            cwd=script_dir
-        )
+        if not os.path.exists(agent_script_path):
+            print(f"    WARNING: threat_agent.py not found at {agent_script_path}")
+            print("    (Agent will not run — use Demo Controls in the dashboard instead)")
+            agent_process = None
+        else:
+            agent_process = subprocess.Popen(
+                [python_exe, agent_script_path],
+                cwd=os.path.join(script_dir, "frontend")
+            )
     
     # 3. Open Dashboard
     time.sleep(2) # Wait for server to boot
@@ -65,7 +77,7 @@ def launch():
             if server_process.poll() is not None:
                 print("\n⚠️ Backend server exited unexpectedly.")
                 break
-            if agent_process.poll() is not None:
+            if agent_process is not None and agent_process.poll() is not None:
                 print("\n⚠️ Monitoring agent exited unexpectedly.")
                 break
             time.sleep(1)
@@ -73,7 +85,10 @@ def launch():
         pass
     finally:
         print("\n🛑 Shutting down GuardianLens...")
-        for name, proc in [("Server", server_process), ("Agent", agent_process)]:
+        processes = [("Server", server_process)]
+        if agent_process is not None:
+            processes.append(("Agent", agent_process))
+        for name, proc in processes:
             if proc.poll() is None:
                 proc.terminate()
                 try:
