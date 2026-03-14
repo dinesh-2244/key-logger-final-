@@ -76,11 +76,12 @@ class ThreatAgent:
         self._file_lock = threading.Lock()
         self._browser_lock = threading.Lock()
 
-        # Keystroke dedup: track which keys are currently held down
-        # macOS fires multiple on_press events per physical keypress,
-        # but only one on_release. Using press/release state eliminates all duplicates.
-        self._keys_held = set()
+        # Keystroke dedup: macOS fires up to 4x on_press AND on_release events
+        # per physical keypress. Use monotonic timestamps with a lock to guarantee
+        # only one event per physical keypress gets through.
+        self._key_timestamps = {}  # key_id -> monotonic timestamp of last accepted event
         self._key_lock = threading.Lock()
+        self._dedup_window = 0.05  # 50ms — fast enough for >200 WPM typing
 
         # Smart Filtering Data
         self.domains_db = {}
@@ -339,14 +340,22 @@ class ThreatAgent:
     # =============================================
     def on_press(self, key):
         try:
-            # Press/release state tracking: macOS fires multiple on_press events
-            # per physical keypress (up to 4x), but only one on_release.
-            # Only process a key if it's not already marked as "held down".
+            # Dedup using monotonic clock under lock.
+            # macOS fires up to 4x on_press AND on_release per physical keypress.
+            # time.monotonic() is immune to system clock adjustments and provides
+            # nanosecond-level precision. Under the lock, only the first event
+            # within the 50ms window gets through.
             key_id = str(key)
+            now = time.monotonic()
             with self._key_lock:
-                if key_id in self._keys_held:
-                    return  # Already held — this is a duplicate event
-                self._keys_held.add(key_id)
+                last = self._key_timestamps.get(key_id, 0)
+                if (now - last) < self._dedup_window:
+                    return  # Duplicate — skip
+                self._key_timestamps[key_id] = now
+                # Prune old entries every 50 keys to avoid unbounded growth
+                if len(self._key_timestamps) > 50:
+                    cutoff = now - 1.0
+                    self._key_timestamps = {k: t for k, t in self._key_timestamps.items() if t > cutoff}
 
             char_to_log = ""
             if hasattr(key, 'char') and key.char is not None:
@@ -379,15 +388,6 @@ class ThreatAgent:
 
         except Exception as e:
             logger.error(f"Keystroke handling error: {e}")
-
-    def on_release(self, key):
-        """Track key releases to allow the same key to be pressed again."""
-        try:
-            key_id = str(key)
-            with self._key_lock:
-                self._keys_held.discard(key_id)
-        except Exception:
-            pass
 
 
     def evaluate_buffer(self):
@@ -1059,9 +1059,9 @@ class ThreatAgent:
         tracker_thread = threading.Thread(target=self.track_activity, daemon=True)
         tracker_thread.start()
 
-        # Start Keylogger (on_release needed to clear press/release state tracking)
+        # Start Keylogger
         logger.info(f"Starting Edge Threat Engine & Keylogger on {CURRENT_OS}...")
-        with keyboard.Listener(on_press=self.on_press, on_release=self.on_release) as listener:
+        with keyboard.Listener(on_press=self.on_press) as listener:
             listener.join()
 
 if __name__ == "__main__":
