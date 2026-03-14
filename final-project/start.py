@@ -20,15 +20,18 @@ def get_python_executable():
 
 def launch():
     print("🚀 Starting GuardianLens v3.0...")
-    
+
+    # Use the directory where this script lives, not cwd
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
     python_exe = get_python_executable()
     print(f"--- Using Python: {python_exe}")
-    
+
     # 1. Start Backend Server
     print("--- Starting Backend Server...")
     server_process = subprocess.Popen(
         [python_exe, "backend/server.py"],
-        cwd=os.getcwd()
+        cwd=script_dir
     )
     
     # 2. Start Monitoring Agent
@@ -40,12 +43,12 @@ def launch():
 
     if os.path.exists(bundled_agent):
         print(f"    (Using bundled binary: {bundled_agent})")
-        agent_process = subprocess.Popen([bundled_agent], cwd=os.getcwd())
+        agent_process = subprocess.Popen([bundled_agent], cwd=script_dir)
     else:
         print("    (Bundled binary not found. Falling back to Python script...)")
         agent_process = subprocess.Popen(
             [python_exe, "frontend/threat_agent.py"],
-            cwd=os.getcwd()
+            cwd=script_dir
         )
     
     # 3. Open Dashboard
@@ -70,10 +73,14 @@ def launch():
         pass
     finally:
         print("\n🛑 Shutting down GuardianLens...")
-        if server_process.poll() is None:
-            server_process.terminate()
-        if agent_process.poll() is None:
-            agent_process.terminate()
+        for name, proc in [("Server", server_process), ("Agent", agent_process)]:
+            if proc.poll() is None:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    print(f"    {name} did not stop gracefully, force killing...")
+                    proc.kill()
 
 if __name__ == "__main__":
     launch()

@@ -40,7 +40,7 @@ class AppCategory(db.Model):
 
 class ActivityLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=datetime.now)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     duration = db.Column(db.Integer, nullable=False) # Renamed from duration_seconds
     app_name = db.Column(db.String(100), nullable=False)
     window_title = db.Column(db.String(500), nullable=True)
@@ -58,7 +58,7 @@ class ScreenTimeRule(db.Model):
 
 class ThreatLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    timestamp = db.Column(db.DateTime, default=datetime.now)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     keyword = db.Column(db.String(100), nullable=False)
     app_name = db.Column(db.String(100), nullable=False)
     full_buffer = db.Column(db.String(500), nullable=True)
@@ -119,11 +119,11 @@ def handle_telemetry_stream(data):
             category_name = act.get('category', 'Neutral')
 
             log = ActivityLog(
-                timestamp=datetime.now(),
+                timestamp=datetime.now(timezone.utc),
                 app_name=act.get('app_name', 'Unknown'),
                 window_title=act.get('window_title', ''),
                 category=category_name,
-                duration=int(act.get('duration', 0))
+                duration=max(0, int(act.get('duration', 0) or 0))
             )
             db.session.add(log)
             saved_count += 1
@@ -145,11 +145,11 @@ def check_screen_time_limits():
     if not rule or not rule.is_active:
         return
     
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     total = db.session.query(db.func.sum(ActivityLog.duration)).filter( # Changed to ActivityLog.duration
         ActivityLog.timestamp >= today_start
     ).scalar() or 0
-    
+
     total_minutes = total / 60
     if total_minutes >= rule.max_daily_minutes:
         logger.warning(f"Screen time limit reached: {total_minutes:.0f}/{rule.max_daily_minutes} minutes")
@@ -203,7 +203,7 @@ def api_login():
     
     if pw_hash == DEFAULT_PASSWORD_HASH:
         session['logged_in'] = True
-        session['login_time'] = datetime.now().isoformat()
+        session['login_time'] = datetime.now(timezone.utc).isoformat()
         logger.info("Parent logged in successfully.")
         return jsonify({"status": "ok"})
     
@@ -237,7 +237,7 @@ def get_weekly_report():
     """Return 7-day usage breakdown by category."""
     days = []
     for i in range(6, -1, -1):
-        day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i)
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i)
         next_day = day + timedelta(days=1)
         
         edu = db.session.query(db.func.sum(ActivityLog.duration)).filter(
@@ -308,9 +308,12 @@ def save_rules():
     rule.active_hours_start = data.get('active_hours_start', '08:00') # Default from diff
     rule.active_hours_end = data.get('active_hours_end', '21:00') # Default from diff
     rule.blocked_apps = json.dumps(data.get('blocked_apps', []))
-    rule.filter_intensity = int(data.get('filter_intensity', 5)) # Added filter_intensity
+    try:
+        rule.filter_intensity = int(data.get('filter_intensity', 5))
+    except (ValueError, TypeError):
+        rule.filter_intensity = 5
     rule.is_active = data.get('is_active', True) # Default from diff
-    rule.updated_at = datetime.now()
+    rule.updated_at = datetime.now(timezone.utc)
     
     db.session.commit()
     logger.info(f"Rules updated: {data}")
@@ -330,11 +333,11 @@ def save_rules():
 @login_required
 def get_status():
     """Return agent connection status and today's screen time."""
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     total = db.session.query(db.func.sum(ActivityLog.duration)).filter(
         ActivityLog.timestamp >= today_start
     ).scalar() or 0
-    
+
     rule = ScreenTimeRule.query.first()
     return jsonify({
         "agent_connected": agent_connected,
@@ -392,4 +395,4 @@ def init_db():
 
 if __name__ == "__main__":
     init_db()
-    socketio.run(app, host="0.0.0.0", port=2000, debug=True)
+    socketio.run(app, host="0.0.0.0", port=2000, debug=False)

