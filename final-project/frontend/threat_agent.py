@@ -130,8 +130,8 @@ class ThreatAgent:
             for category, domains in self.domains_db.items():
                 if domain in domains:
                     return category.capitalize()
-        except:
-            pass
+        except Exception as e:
+            logger.error(f"URL category lookup failed: {e}")
 
         # 2. Keyword/NLP-lite Fallback
         return self._analyze_text(window_title + " " + url)
@@ -351,8 +351,8 @@ class ThreatAgent:
 
             self.evaluate_buffer()
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Keystroke handling error: {e}")
 
 
     def evaluate_buffer(self):
@@ -506,26 +506,37 @@ class ThreatAgent:
                 tmp_copy = os.path.join(os.environ.get('TEMP', '/tmp'), '_guardian_hist_copy.db')
                 try:
                     shutil.copy2(hist_path, tmp_copy)
-                    conn = sqlite3.connect(tmp_copy)
-                    if "Firefox" in browser_name:
-                        cursor = conn.execute(
-                            "SELECT url, last_visit_date FROM moz_places ORDER BY last_visit_date DESC LIMIT 1"
-                        )
-                    else:
-                        cursor = conn.execute(
-                            "SELECT url, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 1"
-                        )
-                    row = cursor.fetchone()
-                    conn.close()
-                    if row and row[1] and row[1] > latest_time:
-                        latest_url = row[0]
-                        latest_time = row[1]
-                except Exception:
-                    pass
+                    with sqlite3.connect(tmp_copy) as conn:
+                        if "Firefox" in browser_name:
+                            cursor = conn.execute(
+                                "SELECT url, last_visit_date FROM moz_places ORDER BY last_visit_date DESC LIMIT 1"
+                            )
+                        else:
+                            cursor = conn.execute(
+                                "SELECT url, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 1"
+                            )
+                        row = cursor.fetchone()
+                        if row and row[1] and row[1] > latest_time:
+                            latest_url = row[0]
+                            latest_time = row[1]
+                except Exception as e:
+                    logger.error(f"Error reading browser history: {e}")
 
             if latest_url and latest_url.startswith("http"):
                 # Filter: only return if visited in the last 30 seconds
-                return latest_url
+                # Chrome timestamps are microseconds since 1601-01-01
+                # Firefox timestamps are microseconds since 1970-01-01
+                import datetime as dt
+                now_epoch = time.time()
+                chrome_epoch_offset = 11644473600  # seconds between 1601 and 1970
+                chrome_now = (now_epoch + chrome_epoch_offset) * 1_000_000
+                if latest_time > 1_000_000_000_000_000:  # Chrome-style timestamp
+                    age_seconds = (chrome_now - latest_time) / 1_000_000
+                else:  # Firefox-style (microseconds since Unix epoch)
+                    age_seconds = now_epoch - (latest_time / 1_000_000)
+                if age_seconds <= 30:
+                    return latest_url
+                return ""
 
         except Exception as e:
             logger.error(f"Windows browser URL extraction error: {e}")
@@ -683,16 +694,15 @@ class ThreatAgent:
                     tmp_copy = "/tmp/_chrome_hist_copy.db"
                     try:
                         shutil.copy2(hist_path, tmp_copy)
-                        conn = sqlite3.connect(tmp_copy)
-                        cursor = conn.execute(
-                            "SELECT url, title, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 1"
-                        )
-                        row = cursor.fetchone()
-                        conn.close()
-                        if row and row[2] > latest_time:
-                            latest_url = row[0]
-                            latest_title = row[1]
-                            latest_time = row[2]
+                        with sqlite3.connect(tmp_copy) as conn:
+                            cursor = conn.execute(
+                                "SELECT url, title, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 1"
+                            )
+                            row = cursor.fetchone()
+                            if row and row[2] > latest_time:
+                                latest_url = row[0]
+                                latest_title = row[1]
+                                latest_time = row[2]
                     except Exception as e:
                         logger.error(f"Error reading Chrome history: {e}")
 
@@ -715,6 +725,8 @@ class ThreatAgent:
             self._scan_browsers_macos(now)
         elif CURRENT_OS == "Windows":
             self._scan_browsers_windows(now)
+        elif CURRENT_OS == "Linux":
+            self._scan_browsers_linux(now)
 
     def _scan_browsers_macos(self, now):
         """macOS: Scan browsers using AppleScript."""
@@ -792,6 +804,84 @@ class ThreatAgent:
                 result = ""
 
             self._process_browser_result(browser_name, result, now)
+
+    def _scan_browsers_linux(self, now):
+        """Linux: Scan browsers by checking running processes and reading history DBs."""
+        browser_processes = {
+            "Google Chrome": "chrome",
+            "Brave Browser": "brave",
+            "Firefox": "firefox",
+        }
+
+        try:
+            ps_result = subprocess.run(
+                ['ps', '-eo', 'comm'],
+                capture_output=True, text=True, timeout=5
+            )
+            running_procs = ps_result.stdout.lower()
+        except Exception:
+            return
+
+        for browser_name, proc_name in browser_processes.items():
+            if proc_name not in running_procs:
+                if browser_name in self.last_urls:
+                    old_key = self.last_urls.pop(browser_name, None)
+                    if old_key:
+                        self.url_start_times.pop(old_key, None)
+                continue
+
+            url = self._get_browser_url_linux(browser_name)
+            if url:
+                result = f"Page|URL|{url}"
+            else:
+                result = ""
+
+            self._process_browser_result(browser_name, result, now)
+
+    def _get_browser_url_linux(self, browser_name):
+        """Try to extract the current URL from a browser on Linux via History DB."""
+        try:
+            import sqlite3, shutil, glob
+            home = os.path.expanduser("~")
+            history_paths = []
+
+            if browser_name in ["Google Chrome", "Chrome"]:
+                history_paths = glob.glob(f"{home}/.config/google-chrome/*/History")
+            elif browser_name == "Brave Browser":
+                history_paths = glob.glob(f"{home}/.config/BraveSoftware/Brave-Browser/*/History")
+            elif browser_name == "Firefox":
+                history_paths = glob.glob(f"{home}/.mozilla/firefox/*/places.sqlite")
+
+            latest_url = ""
+            latest_time = 0
+
+            for hist_path in history_paths:
+                tmp_copy = "/tmp/_guardian_hist_copy.db"
+                try:
+                    shutil.copy2(hist_path, tmp_copy)
+                    with sqlite3.connect(tmp_copy) as conn:
+                        if "Firefox" in browser_name:
+                            cursor = conn.execute(
+                                "SELECT url, last_visit_date FROM moz_places ORDER BY last_visit_date DESC LIMIT 1"
+                            )
+                        else:
+                            cursor = conn.execute(
+                                "SELECT url, last_visit_time FROM urls ORDER BY last_visit_time DESC LIMIT 1"
+                            )
+                        row = cursor.fetchone()
+                        if row and row[1] and row[1] > latest_time:
+                            latest_url = row[0]
+                            latest_time = row[1]
+                except Exception as e:
+                    logger.error(f"Error reading browser history on Linux: {e}")
+
+            if latest_url and latest_url.startswith("http"):
+                return latest_url
+
+        except Exception as e:
+            logger.error(f"Linux browser URL extraction error: {e}")
+
+        return ""
 
     def _process_browser_result(self, browser_name, result, now):
         """Process a browser scan result — shared logic for all platforms."""

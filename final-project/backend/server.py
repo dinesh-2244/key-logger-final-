@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template, session, redirect, u
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 import os, logging, hashlib, json
 
@@ -54,7 +54,7 @@ class ScreenTimeRule(db.Model):
     blocked_apps = db.Column(db.String(500), default="[]")  # JSON list, changed type to String(500)
     filter_intensity = db.Column(db.Integer, default=5) # New field
     is_active = db.Column(db.Boolean, default=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
 class ThreatLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -85,6 +85,8 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    global agent_connected
+    agent_connected = False
     logger.info(f"Client disconnected: {request.sid}")
 
 @socketio.on('agent_hello')

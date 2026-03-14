@@ -1,11 +1,11 @@
 import time
 import json
-import requests
 import subprocess
 from datetime import datetime
+import socketio as sio_module
 
 # Configuration
-SERVER_URL = "http://127.0.0.1:2000/api/telemetry"
+SERVER_URL = "http://127.0.0.1:2000"
 CHECK_INTERVAL_SECONDS = 5  # How often to check the active window
 SYNC_INTERVAL_SECONDS = 60  # How often to send data to the server
 
@@ -15,6 +15,12 @@ class ActivityMonitor:
         self.last_sync_time = time.time()
         self.current_app = None
         self.current_start_time = None
+        self.sio = sio_module.Client(reconnection=True)
+        try:
+            self.sio.connect(SERVER_URL)
+            self.sio.emit('agent_hello', {'agent': 'activity_monitor', 'version': '1.0'})
+        except Exception as e:
+            print(f"Failed to connect to server: {e}")
 
     def get_active_window(self):
         """Retrieve the currently active application name using AppleScript."""
@@ -49,21 +55,21 @@ class ActivityMonitor:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] Active: {app_name}")
 
     def sync_with_server(self):
-        """Send accumulated data to the backend API."""
+        """Send accumulated data to the server via WebSocket."""
         if not self.activities:
             return
 
         payload = {"activities": list(self.activities.values())}
-        
+
         try:
-            response = requests.post(SERVER_URL, json=payload, timeout=5)
-            if response.status_code == 200:
+            if self.sio.connected:
+                self.sio.emit('telemetry_stream', payload)
                 print(f"Successfully synced {len(self.activities)} activities.")
-                # Clear local cache after successful sync
                 self.activities = {}
             else:
-                print(f"Failed to sync: Server returned {response.status_code}")
-        except requests.exceptions.RequestException as e:
+                print("Not connected to server, retrying connection...")
+                self.sio.connect(SERVER_URL)
+        except Exception as e:
             print(f"Error syncing with server: {e}")
 
     def run(self):

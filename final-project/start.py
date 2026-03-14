@@ -59,13 +59,21 @@ def launch():
     try:
         # Keep the script running while services are active
         while True:
-            if server_process.poll() is not None: break
-            if agent_process.poll() is not None: break
+            if server_process.poll() is not None:
+                print("\n⚠️ Backend server exited unexpectedly.")
+                break
+            if agent_process.poll() is not None:
+                print("\n⚠️ Monitoring agent exited unexpectedly.")
+                break
             time.sleep(1)
     except KeyboardInterrupt:
+        pass
+    finally:
         print("\n🛑 Shutting down GuardianLens...")
-        server_process.terminate()
-        agent_process.terminate()
+        if server_process.poll() is None:
+            server_process.terminate()
+        if agent_process.poll() is None:
+            agent_process.terminate()
 
 if __name__ == "__main__":
     launch()

