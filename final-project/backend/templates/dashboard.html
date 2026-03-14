@@ -288,12 +288,12 @@
                     <table class="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
                         <thead class="bg-slate-50 dark:bg-slate-800 sticky top-0">
                             <tr>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Time</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Browser</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Visited At</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Site</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Page Title</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">URL Link</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Full URL</th>
                                 <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Category</th>
-                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Duration</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Time Spent</th>
                             </tr>
                         </thead>
                         <tbody id="webLinksBody" class="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
@@ -637,26 +637,46 @@
                     appCount++;
                 }
                 
-                // URL entries → Web Links
+                // URL entries → Visited Web Links (distinct from app telemetry)
                 const hasURL = wt.includes('http://') || wt.includes('https://');
                 if (hasURL && webCount < 25) {
                     const webTr = document.createElement('tr');
-                    webTr.className = "hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm";
+                    webTr.className = "hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors text-sm";
                     let titleStr = wt, urlStr = "";
                     const urlMatch = wt.match(/\((https?:\/\/[^)]+)\)/);
                     if (urlMatch) { urlStr = urlMatch[1]; titleStr = wt.replace(urlMatch[0], '').trim(); }
                     titleStr = titleStr.replace(/ – Google Chrome.*$/i, '').replace(/ – Safari.*$/i, '')
                                        .replace(/ – Brave.*$/i, '').replace(/ – Firefox.*$/i, '').trim();
                     const safeUrl = sanitizeUrl(urlStr);
+
+                    // Extract domain for display
+                    let domainStr = '';
+                    let faviconHtml = '<span class="w-4 h-4 rounded bg-blue-100 dark:bg-blue-900 inline-flex items-center justify-center text-blue-500 text-xs font-bold">W</span>';
+                    if (safeUrl) {
+                        try {
+                            const parsed = new URL(safeUrl);
+                            domainStr = parsed.hostname.replace('www.', '');
+                            faviconHtml = `<img src="https://www.google.com/s2/favicons?domain=${esc(domainStr)}&sz=16" alt="" class="w-4 h-4 rounded" onerror="this.style.display='none'">`;
+                        } catch(e) {}
+                    }
+
                     const urlDisplay = safeUrl
-                        ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener" class="text-blue-500 hover:underline">${esc(safeUrl.length > 40 ? safeUrl.substring(0, 40) + '...' : safeUrl)}</a>`
+                        ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener" class="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">
+                            ${esc(safeUrl.length > 45 ? safeUrl.substring(0, 45) + '...' : safeUrl)}
+                            <svg class="w-3 h-3 opacity-50 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                          </a>`
                         : '<span class="text-slate-400">—</span>';
 
                     webTr.innerHTML = `
                         <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(timeStr)}</td>
-                        <td class="px-4 py-3 font-medium text-blue-600 whitespace-nowrap">${esc(log.app_name)}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">
+                            <span class="inline-flex items-center gap-2">
+                                ${faviconHtml}
+                                <span class="font-medium text-slate-700 dark:text-slate-300">${esc(domainStr || log.app_name)}</span>
+                            </span>
+                        </td>
                         <td class="px-4 py-3 text-slate-900 dark:text-white max-w-[180px] truncate" title="${esc(titleStr)}">${esc(titleStr) || 'Untitled'}</td>
-                        <td class="px-4 py-3 max-w-[200px] truncate">${urlDisplay}</td>
+                        <td class="px-4 py-3 max-w-[220px] truncate">${urlDisplay}</td>
                         <td class="px-4 py-3">${catBadge}</td>
                         <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(dur)}</td>
                     `;
@@ -821,12 +841,20 @@
     });
 
     socket.on('dashboard_update', (msg) => {
+        // Refresh ALL dashboard sections on any data update
         fetchAnalyticsData();
+        fetchWeeklyData();
+        fetchThreatHistory();
+        fetchStatus();
     });
 
     socket.on('agent_status', (data) => {
         fetchStatus();
-        if (data.connected) showToast('🛡️ Threat Agent connected!', 'success');
+        if (data.connected) {
+            showToast('🛡️ Threat Agent connected!', 'success');
+        } else {
+            showToast('⚠️ Threat Agent disconnected', 'warning');
+        }
     });
 
     socket.on('live_threat', (data) => {
@@ -849,7 +877,12 @@
     });
 
     socket.on('enforce_limit', (data) => {
-        showToast(`⏰ Screen time limit reached! ${data.used_minutes}/${data.max_minutes} minutes used.`, 'warning');
+        if (data.action === 'block') {
+            showToast(`⛔ Screen time limit reached! ${data.used_minutes}/${data.max_minutes} minutes — apps being restricted.`, 'danger');
+        } else {
+            showToast(`⏰ Screen time warning: ${data.used_minutes}/${data.max_minutes} minutes used (90%).`, 'warning');
+        }
+        fetchStatus();
     });
 
     socket.on('live_keylog', (data) => {
@@ -954,8 +987,9 @@
     fetchRules();
     fetchStatus();
     setInterval(fetchAnalyticsData, 5000);
-    setInterval(fetchStatus, 10000);
-    setInterval(fetchWeeklyData, 60000);
+    setInterval(fetchStatus, 5000);
+    setInterval(fetchWeeklyData, 15000);
+    setInterval(fetchThreatHistory, 10000);
     </script>
 </body>
 </html>

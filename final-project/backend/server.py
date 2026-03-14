@@ -78,6 +78,7 @@ def login_required(f):
 # --- WebSocket Real-Time Events ---
 
 agent_connected = False
+agent_sid = None  # Track the actual agent's session ID
 
 @socketio.on('connect')
 def handle_connect():
@@ -85,15 +86,23 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    global agent_connected
-    agent_connected = False
-    logger.info(f"Client disconnected: {request.sid}")
+    global agent_connected, agent_sid
+    # Only mark agent as disconnected if the actual agent disconnected,
+    # not when a dashboard browser tab disconnects
+    if request.sid == agent_sid:
+        agent_connected = False
+        agent_sid = None
+        logger.info(f"Threat agent disconnected: {request.sid}")
+        emit('agent_status', {'connected': False}, broadcast=True)
+    else:
+        logger.info(f"Dashboard client disconnected: {request.sid}")
 
 @socketio.on('agent_hello')
 def handle_agent_hello(data):
-    global agent_connected
+    global agent_connected, agent_sid
     agent_connected = True
-    logger.info("Threat agent connected.")
+    agent_sid = request.sid
+    logger.info(f"Threat agent connected (sid={request.sid}).")
     emit('agent_status', {'connected': True}, broadcast=True)
     # Send current rules to agent
     rule = ScreenTimeRule.query.first()
@@ -114,22 +123,36 @@ def handle_telemetry_stream(data):
     saved_count = 0
     
     try:
+        # Check if daily limit already exceeded before saving
+        rule = ScreenTimeRule.query.first()
+        limit_active = rule and rule.is_active
+        max_seconds = (rule.max_daily_minutes * 60) if rule else float('inf')
+        current_total = get_today_screen_time() if limit_active else 0
+
         for act in activities:
             # Use category from agent (Smart Filtering), fallback to Neutral
             category_name = act.get('category', 'Neutral')
+            duration = max(0, int(act.get('duration', 0) or 0))
+
+            # Cap duration so daily total never exceeds the limit
+            if limit_active and current_total + duration > max_seconds:
+                duration = max(0, max_seconds - current_total)
+                if duration == 0:
+                    continue  # Skip - limit already reached
 
             log = ActivityLog(
                 timestamp=datetime.now(timezone.utc),
                 app_name=act.get('app_name', 'Unknown'),
                 window_title=act.get('window_title', ''),
                 category=category_name,
-                duration=max(0, int(act.get('duration', 0) or 0))
+                duration=duration
             )
             db.session.add(log)
+            current_total += duration
             saved_count += 1
-            
+
         db.session.commit()
-        
+
         # Check screen time limits
         check_screen_time_limits()
         
@@ -139,24 +162,39 @@ def handle_telemetry_stream(data):
         db.session.rollback()
         logger.error(f"Error handling live stream: {e}")
 
+def get_today_screen_time():
+    """Get total screen time used today in seconds."""
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    total = db.session.query(db.func.sum(ActivityLog.duration)).filter(
+        ActivityLog.timestamp >= today_start
+    ).scalar() or 0
+    return total
+
 def check_screen_time_limits():
-    """Check if daily screen time exceeds the set limit and notify agent."""
+    """Check if daily screen time exceeds the set limit and enforce it."""
     rule = ScreenTimeRule.query.first()
     if not rule or not rule.is_active:
         return
-    
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    total = db.session.query(db.func.sum(ActivityLog.duration)).filter( # Changed to ActivityLog.duration
-        ActivityLog.timestamp >= today_start
-    ).scalar() or 0
 
+    total = get_today_screen_time()
     total_minutes = total / 60
-    if total_minutes >= rule.max_daily_minutes:
-        logger.warning(f"Screen time limit reached: {total_minutes:.0f}/{rule.max_daily_minutes} minutes")
+    max_minutes = rule.max_daily_minutes
+
+    if total_minutes >= max_minutes:
+        logger.warning(f"Screen time limit reached: {total_minutes:.0f}/{max_minutes} minutes")
         socketio.emit('enforce_limit', {
             'reason': 'daily_limit_exceeded',
             'used_minutes': int(total_minutes),
-            'max_minutes': rule.max_daily_minutes
+            'max_minutes': max_minutes,
+            'action': 'block'  # Tell agent to actively block
+        }, namespace='/')
+    elif total_minutes >= max_minutes * 0.9:
+        # Warn at 90% usage
+        socketio.emit('enforce_limit', {
+            'reason': 'approaching_limit',
+            'used_minutes': int(total_minutes),
+            'max_minutes': max_minutes,
+            'action': 'warn'
         }, namespace='/')
 
 @socketio.on('threat_alert')

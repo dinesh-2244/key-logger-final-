@@ -178,15 +178,30 @@ class ThreatAgent:
 
     def _on_enforce_limit(self, data):
         """Handle screen time limit enforcement from server."""
-        self.screen_time_exceeded = True
         used = data.get('used_minutes', 0)
         max_min = data.get('max_minutes', 120)
-        logger.warning(f"SCREEN TIME LIMIT EXCEEDED: {used}/{max_min} minutes")
-        self._show_notification(
-            "GuardianLens",
-            f"Screen time limit reached: {used}/{max_min} minutes used",
-            "Time's Up!"
-        )
+        action = data.get('action', 'warn')
+
+        if action == 'block':
+            self.screen_time_exceeded = True
+            logger.warning(f"SCREEN TIME LIMIT EXCEEDED: {used}/{max_min} minutes — BLOCKING")
+            self._show_notification(
+                "GuardianLens",
+                f"Screen time limit reached! {used}/{max_min} minutes used. Apps will be restricted.",
+                "Time's Up!"
+            )
+            # Force-quit the current foreground app (except system apps)
+            safe_apps = {"Finder", "explorer.exe", "File Explorer", "SystemUI", "loginwindow", "Terminal", "PowerShell"}
+            if self.current_app and self.current_app not in safe_apps:
+                self._force_quit_app(self.current_app)
+        elif action == 'warn':
+            self.screen_time_exceeded = False
+            logger.info(f"Screen time warning: {used}/{max_min} minutes (90% used)")
+            self._show_notification(
+                "GuardianLens",
+                f"Screen time warning: {used}/{max_min} minutes used. Limit approaching!",
+                "Almost There"
+            )
 
     # =============================================
     #  CROSS-PLATFORM: Notifications
@@ -318,13 +333,22 @@ class ThreatAgent:
     # =============================================
     def on_press(self, key):
         try:
-            # Debounce: skip duplicate events for the same key within 100ms
-            # macOS Quartz event taps can fire multiple times per physical keystroke
+            # Debounce: skip duplicate events for the same key within 150ms
+            # macOS Quartz event taps and pynput can fire multiple times per physical keystroke
             now = time.time()
             key_id = str(key)
-            if hasattr(self, '_last_key_id') and self._last_key_id == key_id \
-               and hasattr(self, '_last_key_time') and (now - self._last_key_time) < 0.1:
+            if not hasattr(self, '_last_key_id'):
+                self._last_key_id = None
+                self._last_key_time = 0
+                self._recent_keys = {}  # Track all recent key events
+
+            # Clean up old entries from recent keys (older than 200ms)
+            self._recent_keys = {k: t for k, t in self._recent_keys.items() if now - t < 0.2}
+
+            # Skip if this exact key was seen within 150ms (catches all duplicate patterns)
+            if key_id in self._recent_keys and (now - self._recent_keys[key_id]) < 0.15:
                 return  # Skip duplicate
+            self._recent_keys[key_id] = now
             self._last_key_id = key_id
             self._last_key_time = now
 
@@ -981,7 +1005,16 @@ class ThreatAgent:
                 delta_duration = int(now - last_poll_time)
                 
                 # Skip browser apps — they are tracked by scan_all_browsers
+                # Skip all telemetry if screen time limit exceeded
                 is_browser = app_name in browser_apps
+                if self.screen_time_exceeded and self.rules_active:
+                    # Force-quit non-essential apps when limit exceeded
+                    safe_apps = {"Finder", "explorer.exe", "File Explorer", "SystemUI", "loginwindow", "Terminal", "PowerShell"}
+                    if app_name not in safe_apps and not is_browser:
+                        self._force_quit_app(app_name)
+                    last_poll_time = now
+                    time.sleep(CHECK_INTERVAL_SECONDS)
+                    continue
                 if not is_browser and delta_duration >= 1 and self.sio.connected:
                     category = self._get_url_category("", window_title)
                     display_title = window_title
