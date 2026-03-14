@@ -1,0 +1,88 @@
+/* ===== General ===== */
+body {
+    font-family: Arial;
+    margin: 30px;
+    transition: 0.3s;
+    background-color: #f4f6f9;
+    color: #000;
+}
+
+body.dark {
+    background-color: #121212;
+    color: #fff;
+}
+
+h1 {
+    margin-bottom: 20px;
+}
+
+/* ===== Box Styling ===== */
+.box {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    transition: 0.3s;
+}
+
+body.dark .box {
+    background: #1e1e1e;
+    box-shadow: 0 0 10px rgba(255,255,255,0.05);
+}
+
+/* ===== Danger Text ===== */
+.danger {
+    color: red;
+    font-weight: bold;
+}
+
+body.dark .danger {
+    color: #ff4d4d;
+}
+
+/* ===== Text Area ===== */
+pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* ===== Table ===== */
+table {
+    width: 50%;
+    border-collapse: collapse;
+}
+
+th, td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    transition: 0.3s;
+}
+
+th {
+    background-color: #007bff;
+    color: white;
+}
+
+body.dark th {
+    background-color: #333;
+}
+
+body.dark td {
+    border: 1px solid #444;
+}
+
+/* ===== Toggle Button ===== */
+.toggle-btn {
+    padding: 8px 15px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 20px;
+    background: #007bff;
+    color: white;
+}
+
+.toggle-btn:hover {
+    opacity: 0.8;
+}

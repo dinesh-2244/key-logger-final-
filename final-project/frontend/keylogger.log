@@ -1,0 +1,5 @@
+2026-03-05 11:13:17,413 - INFO - Created new log file: C:\Users\chall\Downloads\final project\frontend\keylog.txt
+2026-03-05 11:13:17,413 - INFO - Starting keylogger simulator
+2026-03-05 11:13:17,440 - INFO - Keyboard listener started
+2026-03-05 11:47:55,184 - INFO - ESC pressed - stopping listener
+2026-03-05 11:47:55,197 - INFO - Keylogger shutting down cleanly
