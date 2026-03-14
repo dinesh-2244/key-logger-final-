@@ -19,7 +19,7 @@ import json
 import os
 
 CHECK_INTERVAL_SECONDS = 5
-KEYLOG_FILE = "keylog.txt"
+KEYLOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "keylog.txt")
 RECONNECT_DELAY = 3
 MAX_RECONNECT_DELAY = 30
 
@@ -293,18 +293,26 @@ class ThreatAgent:
                     )
                     logger.info("[RESTRICT] Closed adult tab in Safari")
             elif CURRENT_OS == "Windows":
-                # Send Ctrl+W to close the active tab
+                # Send Ctrl+W only if a known browser window is in the foreground
                 import ctypes
                 user32 = ctypes.windll.user32
-                VK_CONTROL = 0x11
-                VK_W = 0x57
-                KEYEVENTF_KEYUP = 0x0002
-                user32.keybd_event(VK_CONTROL, 0, 0, 0)
-                user32.keybd_event(VK_W, 0, 0, 0)
-                time.sleep(0.05)
-                user32.keybd_event(VK_W, 0, KEYEVENTF_KEYUP, 0)
-                user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
-                logger.info(f"[RESTRICT] Sent Ctrl+W to close tab in {app_name}")
+                hwnd = user32.GetForegroundWindow()
+                buf = ctypes.create_unicode_buffer(256)
+                user32.GetWindowTextW(hwnd, buf, 256)
+                foreground_title = buf.value.lower()
+                browser_hints = ["chrome", "brave", "edge", "firefox", "mozilla"]
+                if any(hint in foreground_title for hint in browser_hints):
+                    VK_CONTROL = 0x11
+                    VK_W = 0x57
+                    KEYEVENTF_KEYUP = 0x0002
+                    user32.keybd_event(VK_CONTROL, 0, 0, 0)
+                    user32.keybd_event(VK_W, 0, 0, 0)
+                    time.sleep(0.05)
+                    user32.keybd_event(VK_W, 0, KEYEVENTF_KEYUP, 0)
+                    user32.keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0)
+                    logger.info(f"[RESTRICT] Sent Ctrl+W to close tab in {app_name}")
+                else:
+                    logger.warning(f"[RESTRICT] Skipped Ctrl+W — foreground window is not a browser: {buf.value}")
         except Exception as e:
             logger.error(f"Failed to close tab: {e}")
 
@@ -351,8 +359,8 @@ class ThreatAgent:
 
             self.evaluate_buffer()
 
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Error in on_press: {e}")
 
 
     def evaluate_buffer(self):
@@ -524,8 +532,22 @@ class ThreatAgent:
                     pass
 
             if latest_url and latest_url.startswith("http"):
-                # Filter: only return if visited in the last 30 seconds
-                return latest_url
+                # Chrome timestamps are microseconds since 1601-01-01; Firefox uses microseconds since epoch
+                # Convert latest_time to a Unix timestamp for comparison
+                import time as _time
+                try:
+                    if "Firefox" in str(history_paths):
+                        # Firefox: microseconds since Unix epoch
+                        visited_unix = latest_time / 1_000_000
+                    else:
+                        # Chrome/Edge/Brave: microseconds since 1601-01-01
+                        # Offset between 1601-01-01 and 1970-01-01 in seconds
+                        CHROME_EPOCH_OFFSET = 11644473600
+                        visited_unix = (latest_time / 1_000_000) - CHROME_EPOCH_OFFSET
+                    if _time.time() - visited_unix <= 30:
+                        return latest_url
+                except Exception:
+                    return latest_url
 
         except Exception as e:
             logger.error(f"Windows browser URL extraction error: {e}")
