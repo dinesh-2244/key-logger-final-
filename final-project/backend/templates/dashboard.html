@@ -741,21 +741,46 @@
 
     function renderTimelineChart(logs) {
         const ctx = document.getElementById('timelineChart').getContext('2d');
-        const recent = [...logs].reverse().slice(-20);
-        const labels = recent.map(l => new Date(l.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
-        const data = recent.map(l => Math.round(l.duration / 60));
-        const colors = recent.map(l => l.category === 'Educational' ? '#10b981' : l.category === 'Entertainment' ? '#ef4444' : '#94a3b8');
+        // Aggregate durations by 15-minute time slots for a meaningful timeline
+        const recent = [...logs].reverse();
+        const slotMap = {};  // "HH:MM" -> {edu: seconds, ent: seconds, neutral: seconds}
+
+        recent.forEach(l => {
+            const d = new Date(l.timestamp);
+            // Round down to nearest 15-minute slot
+            const slotMin = Math.floor(d.getMinutes() / 15) * 15;
+            const slotKey = `${d.getHours().toString().padStart(2,'0')}:${slotMin.toString().padStart(2,'0')}`;
+            if (!slotMap[slotKey]) slotMap[slotKey] = { edu: 0, ent: 0, neutral: 0 };
+            const cat = (l.category || '').toLowerCase();
+            if (cat.includes('edu')) slotMap[slotKey].edu += l.duration;
+            else if (cat.includes('ent')) slotMap[slotKey].ent += l.duration;
+            else slotMap[slotKey].neutral += l.duration;
+        });
+
+        // Take the last 8 slots (2 hours worth of 15-min intervals)
+        const slotKeys = Object.keys(slotMap).sort().slice(-8);
+        const eduData = slotKeys.map(k => Math.round(slotMap[k].edu / 60 * 10) / 10);
+        const entData = slotKeys.map(k => Math.round(slotMap[k].ent / 60 * 10) / 10);
+        const neutralData = slotKeys.map(k => Math.round(slotMap[k].neutral / 60 * 10) / 10);
+
         if (timelineChartInstance) timelineChartInstance.destroy();
         timelineChartInstance = new Chart(ctx, {
             type: 'bar',
-            data: { labels, datasets: [{ label: 'Duration (min)', data, backgroundColor: colors, borderRadius: 4 }] },
+            data: {
+                labels: slotKeys,
+                datasets: [
+                    { label: 'Educational', data: eduData, backgroundColor: '#10b981', borderRadius: 4 },
+                    { label: 'Entertainment', data: entData, backgroundColor: '#ef4444', borderRadius: 4 },
+                    { label: 'Neutral', data: neutralData, backgroundColor: '#94a3b8', borderRadius: 4 },
+                ]
+            },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 scales: {
-                    y: { beginAtZero: true, title: { display: true, text: 'Minutes' }, grid: { color: 'rgba(148,163,184,0.1)' } },
-                    x: { grid: { display: false } }
+                    x: { stacked: true, grid: { display: false } },
+                    y: { stacked: true, beginAtZero: true, title: { display: true, text: 'Minutes' }, grid: { color: 'rgba(148,163,184,0.1)' } }
                 },
-                plugins: { legend: { display: false }, tooltip: { callbacks: { title: (ctx) => recent[ctx[0].dataIndex]?.app_name } } }
+                plugins: { legend: { labels: { color: document.documentElement.classList.contains('dark') ? '#cbd5e1' : '#475569' } } }
             }
         });
     }
