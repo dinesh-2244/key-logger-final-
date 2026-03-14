@@ -331,6 +331,79 @@
             </div>
         </div>
 
+        <!-- Export & Reports -->
+        <div class="glass-card p-6 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-medium text-slate-900 dark:text-white flex items-center gap-2">
+                    <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Export Reports
+                </h3>
+            </div>
+            <div class="flex flex-wrap gap-3">
+                <a href="/api/reports/export?type=activity" class="inline-flex items-center gap-2 bg-emerald-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-emerald-600 transition-colors shadow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download Activity CSV
+                </a>
+                <a href="/api/reports/export?type=threats" class="inline-flex items-center gap-2 bg-red-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-red-600 transition-colors shadow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download Threats CSV
+                </a>
+            </div>
+        </div>
+
+        <!-- Demo Controls -->
+        <div class="glass-card p-6 mb-8 border-2 border-dashed border-indigo-300 dark:border-indigo-700">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-medium text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Demo Controls (For Presentation)
+                </h3>
+                <span class="text-xs bg-indigo-100 dark:bg-indigo-900 text-indigo-600 dark:text-indigo-300 px-3 py-1 rounded-full font-medium">PROJECT DEMO</span>
+            </div>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Use these controls to demonstrate all features during your project presentation without needing a live monitoring agent.</p>
+            <div class="flex flex-wrap gap-3">
+                <button onclick="demoSimulate()" class="inline-flex items-center gap-2 bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-indigo-600 transition-colors shadow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>
+                    Load Sample Data
+                </button>
+                <button onclick="demoThreat()" class="inline-flex items-center gap-2 bg-red-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-red-600 transition-colors shadow animate-pulse hover:animate-none">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    Trigger Threat Alert
+                </button>
+                <button onclick="demoKeystroke()" class="inline-flex items-center gap-2 bg-green-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-green-600 transition-colors shadow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    Simulate Keystrokes
+                </button>
+                <button onclick="demoClear()" class="inline-flex items-center gap-2 bg-slate-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-slate-600 transition-colors shadow">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    Clear All Data
+                </button>
+            </div>
+        </div>
+
+        <!-- Change Password -->
+        <div class="glass-card p-6 mb-8">
+            <h3 class="text-lg font-medium text-slate-900 dark:text-white flex items-center gap-2 mb-4">
+                <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                Change Password
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Current Password</label>
+                    <input type="password" id="currentPw" class="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-primary outline-none bg-white dark:bg-slate-700 text-slate-900 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">New Password</label>
+                    <input type="password" id="newPw" class="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-primary outline-none bg-white dark:bg-slate-700 text-slate-900 dark:text-white">
+                </div>
+                <div class="flex items-end">
+                    <button onclick="changePassword()" class="bg-primary text-white px-6 py-2.5 rounded-xl text-sm font-medium hover:bg-secondary transition-colors shadow">
+                        Update Password
+                    </button>
+                </div>
+            </div>
+        </div>
+
     </main>
 
     <script>
@@ -342,6 +415,22 @@
         if (m < 60) return `${m}m ${s}s`;
         const h = Math.floor(m / 60);
         return `${h}h ${m % 60}m`;
+    }
+
+    function esc(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML;
+    }
+
+    function sanitizeUrl(url) {
+        if (!url) return '';
+        try {
+            const parsed = new URL(url);
+            if (['http:', 'https:'].includes(parsed.protocol)) return url;
+        } catch(e) {}
+        return '';
     }
 
     function showToast(message, type = 'info') {
@@ -533,16 +622,16 @@
                         .replace(/ – Brave.*$/i, '').replace(/ – Firefox.*$/i, '').trim();
                     
                     appTr.innerHTML = `
-                        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${timeStr}</td>
+                        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(timeStr)}</td>
                         <td class="px-4 py-3 font-medium text-slate-900 dark:text-white whitespace-nowrap">
                             <span class="inline-flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full ${catDot}"></span>
-                                ${log.app_name}
+                                ${esc(log.app_name)}
                             </span>
                         </td>
-                        <td class="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[200px] truncate" title="${appTitle}">${appTitle || 'Main Window'}</td>
+                        <td class="px-4 py-3 text-slate-600 dark:text-slate-300 max-w-[200px] truncate" title="${esc(appTitle)}">${esc(appTitle) || 'Main Window'}</td>
                         <td class="px-4 py-3">${catBadge}</td>
-                        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${dur}</td>
+                        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(dur)}</td>
                     `;
                     appTelemetryBody.appendChild(appTr);
                     appCount++;
@@ -558,17 +647,18 @@
                     if (urlMatch) { urlStr = urlMatch[1]; titleStr = wt.replace(urlMatch[0], '').trim(); }
                     titleStr = titleStr.replace(/ – Google Chrome.*$/i, '').replace(/ – Safari.*$/i, '')
                                        .replace(/ – Brave.*$/i, '').replace(/ – Firefox.*$/i, '').trim();
-                    const urlDisplay = urlStr
-                        ? `<a href="${urlStr}" target="_blank" class="text-blue-500 hover:underline">${urlStr.length > 40 ? urlStr.substring(0, 40) + '...' : urlStr}</a>`
+                    const safeUrl = sanitizeUrl(urlStr);
+                    const urlDisplay = safeUrl
+                        ? `<a href="${esc(safeUrl)}" target="_blank" rel="noopener" class="text-blue-500 hover:underline">${esc(safeUrl.length > 40 ? safeUrl.substring(0, 40) + '...' : safeUrl)}</a>`
                         : '<span class="text-slate-400">—</span>';
-                    
+
                     webTr.innerHTML = `
-                        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${timeStr}</td>
-                        <td class="px-4 py-3 font-medium text-blue-600 whitespace-nowrap">${log.app_name}</td>
-                        <td class="px-4 py-3 text-slate-900 dark:text-white max-w-[180px] truncate" title="${titleStr}">${titleStr || 'Untitled'}</td>
+                        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(timeStr)}</td>
+                        <td class="px-4 py-3 font-medium text-blue-600 whitespace-nowrap">${esc(log.app_name)}</td>
+                        <td class="px-4 py-3 text-slate-900 dark:text-white max-w-[180px] truncate" title="${esc(titleStr)}">${esc(titleStr) || 'Untitled'}</td>
                         <td class="px-4 py-3 max-w-[200px] truncate">${urlDisplay}</td>
                         <td class="px-4 py-3">${catBadge}</td>
-                        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${dur}</td>
+                        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(dur)}</td>
                     `;
                     webLinksBody.appendChild(webTr);
                     webCount++;
@@ -708,11 +798,11 @@
             tr.className = "hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-sm";
             const sevColor = t.severity === 'high' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200';
             tr.innerHTML = `
-                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${new Date(t.timestamp).toLocaleString()}</td>
-                <td class="px-4 py-3"><span class="px-2 py-1 text-xs font-medium rounded-full ${sevColor}">${t.severity.toUpperCase()}</span></td>
-                <td class="px-4 py-3 font-mono text-red-600 dark:text-red-400">${t.keyword}</td>
-                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">${t.app_name}</td>
-                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-[200px] truncate font-mono text-xs" title="${t.full_buffer}">${t.full_buffer || '—'}</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 whitespace-nowrap">${esc(new Date(t.timestamp).toLocaleString())}</td>
+                <td class="px-4 py-3"><span class="px-2 py-1 text-xs font-medium rounded-full ${sevColor}">${esc(t.severity.toUpperCase())}</span></td>
+                <td class="px-4 py-3 font-mono text-red-600 dark:text-red-400">${esc(t.keyword)}</td>
+                <td class="px-4 py-3 text-slate-700 dark:text-slate-300">${esc(t.app_name)}</td>
+                <td class="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-[200px] truncate font-mono text-xs" title="${esc(t.full_buffer)}">${esc(t.full_buffer) || '—'}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -740,14 +830,14 @@
     });
 
     socket.on('live_threat', (data) => {
-        // Banner
-        document.getElementById('threat-keyword').innerText = data.keyword;
-        document.getElementById('threat-app').innerText = data.app_name;
-        document.getElementById('threat-buffer').innerText = `"...${data.full_buffer}..."`;
-        document.getElementById('threat-time').innerText = new Date(data.timestamp).toLocaleTimeString();
+        // Banner (using textContent for safety)
+        document.getElementById('threat-keyword').textContent = data.keyword;
+        document.getElementById('threat-app').textContent = data.app_name;
+        document.getElementById('threat-buffer').textContent = `"...${data.full_buffer}..."`;
+        document.getElementById('threat-time').textContent = new Date(data.timestamp).toLocaleTimeString();
         document.getElementById('threat-alert').classList.remove('hidden');
         // Toast
-        showToast(`🚨 THREAT: "${data.keyword}" detected in ${data.app_name}`, 'danger');
+        showToast(`THREAT: "${esc(data.keyword)}" detected in ${esc(data.app_name)}`, 'danger');
         // Refresh threat table
         fetchThreatHistory();
         // Warning beep
@@ -765,15 +855,97 @@
     socket.on('live_keylog', (data) => {
         const terminal = document.getElementById('keylog-terminal');
         const contentSpan = document.getElementById('keylog-content');
-        document.getElementById('current-keylog-app').innerText = `Target: [${data.app_name}]`;
+        document.getElementById('current-keylog-app').textContent = `Target: [${data.app_name}]`;
         let ch = data.char;
-        if (ch === '\n') ch = '<br><span class="opacity-50 text-xs ml-2">↳</span> ';
-        else if (ch === ' ') ch = '&nbsp;';
-        else if (ch === '[BACKSPACE]') ch = '<span class="text-red-500 opacity-75 text-xs">[DEL]</span>';
-        else ch = ch.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        contentSpan.innerHTML += ch;
+        if (ch === '\n') {
+            contentSpan.appendChild(document.createElement('br'));
+            const arrow = document.createElement('span');
+            arrow.className = 'opacity-50 text-xs ml-2';
+            arrow.textContent = '↳ ';
+            contentSpan.appendChild(arrow);
+        } else if (ch === ' ') {
+            contentSpan.appendChild(document.createTextNode('\u00A0'));
+        } else if (ch === '[BACKSPACE]') {
+            const del = document.createElement('span');
+            del.className = 'text-red-500 opacity-75 text-xs';
+            del.textContent = '[DEL]';
+            contentSpan.appendChild(del);
+        } else {
+            contentSpan.appendChild(document.createTextNode(ch));
+        }
         terminal.scrollTop = terminal.scrollHeight;
     });
+
+    // ========== DEMO CONTROLS ==========
+    async function demoSimulate() {
+        try {
+            const res = await fetch('/api/demo/simulate', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(data.message, 'success');
+                fetchAnalyticsData();
+                fetchWeeklyData();
+                fetchStatus();
+            } else {
+                showToast(data.message || 'Failed to load demo data', 'danger');
+            }
+        } catch(e) { showToast('Connection error', 'danger'); }
+    }
+
+    async function demoThreat() {
+        try {
+            const res = await fetch('/api/demo/threat', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) showToast(data.message, 'warning');
+        } catch(e) { showToast('Connection error', 'danger'); }
+    }
+
+    async function demoKeystroke() {
+        try {
+            const res = await fetch('/api/demo/keystroke', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) showToast(data.message, 'success');
+        } catch(e) { showToast('Connection error', 'danger'); }
+    }
+
+    async function demoClear() {
+        if (!confirm('Are you sure you want to clear all activity and threat data?')) return;
+        try {
+            const res = await fetch('/api/demo/clear', { method: 'POST' });
+            const data = await res.json();
+            if (res.ok) {
+                showToast('All data cleared', 'success');
+                fetchAnalyticsData();
+                fetchWeeklyData();
+                fetchThreatHistory();
+                fetchStatus();
+                document.getElementById('keylog-content').textContent = '';
+            }
+        } catch(e) { showToast('Connection error', 'danger'); }
+    }
+
+    // ========== PASSWORD CHANGE ==========
+    async function changePassword() {
+        const current = document.getElementById('currentPw').value;
+        const newPw = document.getElementById('newPw').value;
+        if (!current || !newPw) { showToast('Please fill in both fields', 'warning'); return; }
+        if (newPw.length < 6) { showToast('New password must be at least 6 characters', 'warning'); return; }
+        try {
+            const res = await fetch('/api/change-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ current_password: current, new_password: newPw })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(data.message, 'success');
+                document.getElementById('currentPw').value = '';
+                document.getElementById('newPw').value = '';
+            } else {
+                showToast(data.message || 'Failed to change password', 'danger');
+            }
+        } catch(e) { showToast('Connection error', 'danger'); }
+    }
 
     // ========== INIT ==========
     fetchAnalyticsData();

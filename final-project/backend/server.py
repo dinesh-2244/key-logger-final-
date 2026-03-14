@@ -1,10 +1,10 @@
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 from datetime import datetime, timedelta, timezone
 from functools import wraps
-import os, logging, hashlib, json
+import os, logging, hashlib, json, random, csv, io
 
 # --- App Setup ---
 app = Flask(__name__)
@@ -157,7 +157,7 @@ def check_screen_time_limits():
             'reason': 'daily_limit_exceeded',
             'used_minutes': int(total_minutes),
             'max_minutes': rule.max_daily_minutes
-        })
+        }, namespace='/')
 
 @socketio.on('threat_alert')
 def handle_threat_alert(data):
@@ -345,6 +345,223 @@ def get_status():
         "max_daily_minutes": rule.max_daily_minutes if rule else 120,
         "limit_active": rule.is_active if rule else False
     })
+
+# --- Password Change ---
+
+@app.route("/api/change-password", methods=["POST"])
+@login_required
+def change_password():
+    global DEFAULT_PASSWORD_HASH
+    data = request.get_json() or {}
+    current = data.get('current_password', '')
+    new_pw = data.get('new_password', '')
+
+    if not new_pw or len(new_pw) < 6:
+        return jsonify({"status": "error", "message": "New password must be at least 6 characters"}), 400
+
+    current_hash = hashlib.sha256(current.encode()).hexdigest()
+    if current_hash != DEFAULT_PASSWORD_HASH:
+        return jsonify({"status": "error", "message": "Current password is incorrect"}), 401
+
+    DEFAULT_PASSWORD_HASH = hashlib.sha256(new_pw.encode()).hexdigest()
+    logger.info("Password changed successfully.")
+    return jsonify({"status": "ok", "message": "Password changed successfully"})
+
+# --- CSV Export ---
+
+@app.route("/api/reports/export", methods=["GET"])
+@login_required
+def export_csv():
+    """Export activity logs and threat data as CSV."""
+    report_type = request.args.get('type', 'activity')
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    if report_type == 'threats':
+        writer.writerow(['Timestamp', 'Severity', 'Keyword', 'Application', 'Context'])
+        threats = ThreatLog.query.order_by(ThreatLog.timestamp.desc()).all()
+        for t in threats:
+            writer.writerow([
+                t.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                t.severity, t.keyword, t.app_name, t.full_buffer or ''
+            ])
+        filename = f"guardian_threats_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+    else:
+        writer.writerow(['Timestamp', 'Application', 'Window Title', 'Category', 'Duration (seconds)'])
+        logs = ActivityLog.query.order_by(ActivityLog.timestamp.desc()).limit(500).all()
+        for log in logs:
+            writer.writerow([
+                log.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                log.app_name, log.window_title or '', log.category or 'Neutral', log.duration
+            ])
+        filename = f"guardian_activity_{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename={filename}'}
+    )
+
+# --- Demo Simulation ---
+
+@app.route("/api/demo/simulate", methods=["POST"])
+@login_required
+def demo_simulate():
+    """Inject realistic sample data for project demonstration."""
+    try:
+        now = datetime.now(timezone.utc)
+
+        # Sample apps with categories
+        sample_apps = [
+            ("Google Chrome", "Khan Academy - Courses", "Educational", 300),
+            ("Google Chrome", "YouTube - Math Tutorial (https://youtube.com/watch?v=abc)", "Entertainment", 180),
+            ("Visual Studio Code", "project/main.py - VSCode", "Educational", 600),
+            ("Google Chrome", "Wikipedia - Python Programming (https://en.wikipedia.org/wiki/Python)", "Educational", 240),
+            ("Discord", "General - Study Group", "Social Media", 120),
+            ("Spotify", "Focus Playlist", "Entertainment", 90),
+            ("Google Chrome", "Coursera - Machine Learning (https://coursera.org/learn/ml)", "Educational", 420),
+            ("Google Chrome", "Reddit - r/programming (https://reddit.com/r/programming)", "Social Media", 150),
+            ("Terminal", "pip install numpy", "Educational", 60),
+            ("Google Chrome", "Stack Overflow - Python Error (https://stackoverflow.com/questions/123)", "Educational", 200),
+            ("Minecraft", "Minecraft Java Edition", "Entertainment", 300),
+            ("Google Chrome", "Netflix - Documentary (https://netflix.com/watch/456)", "Entertainment", 360),
+            ("Microsoft Word", "Final Year Report.docx", "Educational", 500),
+            ("Google Chrome", "GitHub - Repository (https://github.com/user/project)", "Educational", 280),
+            ("Brave Browser", "Twitter - Feed (https://twitter.com/home)", "Social Media", 100),
+        ]
+
+        # Generate today's data (spread across last 6 hours)
+        for i, (app, title, cat, dur) in enumerate(sample_apps):
+            minutes_ago = random.randint(10, 360)
+            log = ActivityLog(
+                timestamp=now - timedelta(minutes=minutes_ago),
+                app_name=app,
+                window_title=title,
+                category=cat,
+                duration=dur + random.randint(-30, 30)
+            )
+            db.session.add(log)
+
+        # Generate last 7 days of historical data for weekly charts
+        for days_ago in range(1, 7):
+            day = now - timedelta(days=days_ago)
+            # Educational apps
+            for _ in range(random.randint(3, 6)):
+                db.session.add(ActivityLog(
+                    timestamp=day.replace(hour=random.randint(8, 18), minute=random.randint(0, 59)),
+                    app_name=random.choice(["Google Chrome", "Visual Studio Code", "Microsoft Word", "Terminal"]),
+                    window_title=random.choice(["Khan Academy", "Coursera", "Research Paper", "Code Editor", "Stack Overflow"]),
+                    category="Educational",
+                    duration=random.randint(120, 600)
+                ))
+            # Entertainment apps
+            for _ in range(random.randint(2, 4)):
+                db.session.add(ActivityLog(
+                    timestamp=day.replace(hour=random.randint(15, 21), minute=random.randint(0, 59)),
+                    app_name=random.choice(["YouTube", "Spotify", "Minecraft", "Netflix"]),
+                    window_title=random.choice(["Gaming Session", "Music Playlist", "Movie Time", "YouTube Video"]),
+                    category="Entertainment",
+                    duration=random.randint(60, 400)
+                ))
+            # Neutral apps
+            for _ in range(random.randint(1, 3)):
+                db.session.add(ActivityLog(
+                    timestamp=day.replace(hour=random.randint(9, 20), minute=random.randint(0, 59)),
+                    app_name=random.choice(["File Explorer", "Settings", "Calculator", "Notepad"]),
+                    window_title="Main Window",
+                    category="Neutral",
+                    duration=random.randint(30, 120)
+                ))
+
+        db.session.commit()
+
+        # Broadcast update to dashboard
+        socketio.emit('dashboard_update', {'message': 'Demo data loaded', 'count': len(sample_apps)}, namespace='/')
+
+        logger.info(f"Demo data injected: {len(sample_apps)} today + 7 days history")
+        return jsonify({"status": "ok", "message": f"Injected {len(sample_apps)} activity records + 7 days of history"})
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Demo simulation error: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/api/demo/threat", methods=["POST"])
+@login_required
+def demo_threat():
+    """Simulate a live threat alert for demonstration."""
+    try:
+        keywords = ["hack", "bypass", "exploit", "password", "credit card"]
+        keyword = random.choice(keywords)
+        apps = ["Google Chrome", "Terminal", "Discord", "Notepad"]
+        app_name = random.choice(apps)
+        buffers = {
+            "hack": "how to hack wifi password",
+            "bypass": "bypass school firewall vpn",
+            "exploit": "exploit vulnerability tutorial",
+            "password": "steal password from browser",
+            "credit card": "find credit card numbers online"
+        }
+
+        threat = ThreatLog(
+            keyword=keyword,
+            app_name=app_name,
+            full_buffer=buffers.get(keyword, keyword),
+            severity="high" if keyword in ['exploit', 'hack'] else "medium"
+        )
+        db.session.add(threat)
+        db.session.commit()
+
+        # Broadcast live threat to dashboard
+        socketio.emit('live_threat', {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'keyword': keyword,
+            'app_name': app_name,
+            'full_buffer': buffers.get(keyword, keyword),
+            'category': 'Threat'
+        }, namespace='/')
+
+        return jsonify({"status": "ok", "message": f"Threat simulated: '{keyword}' in {app_name}"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route("/api/demo/keystroke", methods=["POST"])
+@login_required
+def demo_keystroke():
+    """Simulate live keystrokes for demonstration."""
+    sentences = [
+        "Hello, I am working on my final year project for cybersecurity class.",
+        "This parental monitoring tool tracks application usage and detects threats.",
+        "The system uses WebSocket for real-time communication between agent and server.",
+        "Let me search for some educational content on Khan Academy.",
+        "import numpy as np\ndata = np.array([1, 2, 3])\nprint(data.mean())",
+    ]
+    sentence = random.choice(sentences)
+    app_name = random.choice(["Google Chrome", "Visual Studio Code", "Terminal", "Microsoft Word"])
+
+    for char in sentence:
+        socketio.emit('live_keylog', {
+            'char': char,
+            'app_name': app_name
+        }, namespace='/')
+
+    return jsonify({"status": "ok", "message": f"Simulated {len(sentence)} keystrokes in {app_name}"})
+
+@app.route("/api/demo/clear", methods=["POST"])
+@login_required
+def demo_clear():
+    """Clear all demo/activity data."""
+    try:
+        ActivityLog.query.delete()
+        ThreatLog.query.delete()
+        db.session.commit()
+        socketio.emit('dashboard_update', {'message': 'Data cleared'}, namespace='/')
+        return jsonify({"status": "ok", "message": "All activity and threat data cleared"})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # --- Frontend Routes ---
 
