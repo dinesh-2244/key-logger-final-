@@ -5,17 +5,26 @@ import os
 import sys
 
 def get_python_executable():
-    """Find the project virtual environment python, or fallback to current sys.executable."""
-    # Check for .venv in common locations
+    """Find a working Python with required packages installed."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
     venv_paths = [
-        os.path.join(os.getcwd(), ".venv", "bin", "python"), # macOS/Linux
-        os.path.join(os.getcwd(), ".venv", "Scripts", "python.exe"), # Windows
-        os.path.join(os.getcwd(), "..", ".venv", "bin", "python"), # If run from a subfolder
-        os.path.join(os.getcwd(), "..", ".venv", "Scripts", "python.exe")
+        os.path.join(script_dir, ".venv", "bin", "python"),
+        os.path.join(script_dir, ".venv", "Scripts", "python.exe"),
+        os.path.join(script_dir, "..", ".venv", "bin", "python"),
+        os.path.join(script_dir, "..", ".venv", "Scripts", "python.exe"),
     ]
     for path in venv_paths:
         if os.path.exists(path):
-            return path
+            # Verify the venv actually has flask installed
+            try:
+                result = subprocess.run(
+                    [path, "-c", "import flask"],
+                    capture_output=True, timeout=5
+                )
+                if result.returncode == 0:
+                    return path
+            except Exception:
+                pass
     return sys.executable
 
 def launch():
