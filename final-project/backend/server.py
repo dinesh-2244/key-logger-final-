@@ -140,14 +140,26 @@ def handle_telemetry_stream(data):
                 if duration == 0:
                     continue  # Skip - limit already reached
 
-            log = ActivityLog(
-                timestamp=datetime.now(timezone.utc),
-                app_name=act.get('app_name', 'Unknown'),
-                window_title=act.get('window_title', ''),
-                category=category_name,
-                duration=duration
-            )
-            db.session.add(log)
+            app_name = act.get('app_name', 'Unknown')
+            window_title = act.get('window_title', '')
+
+            # Merge with the most recent log if same app+window (avoids repeated rows every poll)
+            latest = ActivityLog.query.filter_by(
+                app_name=app_name, window_title=window_title
+            ).order_by(ActivityLog.id.desc()).first()
+
+            if latest:
+                latest.duration += duration
+            else:
+                log = ActivityLog(
+                    timestamp=datetime.now(timezone.utc),
+                    app_name=app_name,
+                    window_title=window_title,
+                    category=category_name,
+                    duration=duration
+                )
+                db.session.add(log)
+
             current_total += duration
             saved_count += 1
 

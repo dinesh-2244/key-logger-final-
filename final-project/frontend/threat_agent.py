@@ -81,7 +81,7 @@ class ThreatAgent:
         # only one event per physical keypress gets through.
         self._key_timestamps = {}  # key_id -> monotonic timestamp of last accepted event
         self._key_lock = threading.Lock()
-        self._dedup_window = 0.05  # 50ms — fast enough for >200 WPM typing
+        self._dedup_window = 0.12  # 120ms — catches all macOS duplicate events (spaced ~30-80ms apart)
 
         # Smart Filtering Data
         self.domains_db = {}
