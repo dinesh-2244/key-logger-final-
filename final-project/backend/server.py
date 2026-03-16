@@ -143,12 +143,13 @@ def handle_telemetry_stream(data):
             app_name = act.get('app_name', 'Unknown')
             window_title = act.get('window_title', '')
 
-            # Merge with the most recent log if same app+window (avoids repeated rows every poll)
-            latest = ActivityLog.query.filter_by(
-                app_name=app_name, window_title=window_title
-            ).order_by(ActivityLog.id.desc()).first()
+            # Merge with the most recent log ONLY if it's the same app+window
+            # (i.e., user is still on the same page/app since the last poll).
+            # This avoids creating a new row every 5s while still creating
+            # a fresh row when the user switches to a different app or page.
+            latest = ActivityLog.query.order_by(ActivityLog.id.desc()).first()
 
-            if latest:
+            if latest and latest.app_name == app_name and latest.window_title == window_title:
                 latest.duration += duration
             else:
                 log = ActivityLog(
